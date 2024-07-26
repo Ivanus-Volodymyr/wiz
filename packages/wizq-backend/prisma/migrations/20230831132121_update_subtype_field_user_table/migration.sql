@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "User" ALTER COLUMN "subType" DROP NOT NULL,
+ALTER COLUMN "subType" DROP DEFAULT;

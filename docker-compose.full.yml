@@ -1,0 +1,39 @@
+version: "3"
+services:
+  postgres:
+    container_name: postgres
+    image: postgres:latest
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: wizquotes
+      PGDATA: /data/postgres
+    volumes:
+      - postgres-db:/data/postgres
+    ports:
+      - "5432:5432"
+  ui:
+    image: cypress/base:latest
+
+  frontend:
+    build:
+      context: ./packages/wizq-frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+      - "9090:9090"
+    depends_on:
+      - postgres
+
+  backend:
+    build:
+      context: ./packages/wizq-backend
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    restart: always
+    depends_on: [postgres, frontend]
+
+volumes:
+  postgres-db:
+    driver: local

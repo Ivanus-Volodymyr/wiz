@@ -1,0 +1,101 @@
+name: Frontend QA Deployment
+
+on:
+  push:
+    paths:
+      - packages/wizq-frontend/*
+    branches:
+      - qa
+  workflow_dispatch:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+      - name: Install dependencies
+        run: npm install
+      - name: Run tests
+        env:
+            FRONT_URL: ${{ secrets.FRONT_URL_QA }}
+        run: npm run cypress:run
+
+  deploy:
+    name: Build image
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-central-1
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+#      - name: Get current image tag
+#        id: current-image
+#        env:
+#          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+#        run: |
+#          NETWORK=${{ matrix.networks }}
+#          IMAGE_TAG=$(aws ecr describe-images --output json --repository-name prod-proxy-repo --query 'sort_by(imageDetails,& imagePushedAt)[-1].imageTags[0]')
+#          echo "::set-output name=image-tag::$ECR_REGISTRY/prod-proxy-repo:${IMAGE_TAG}"
+
+      - name: Build, tag, and push image to Amazon ECR
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: wizquotes-fe-qa
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/wizquotes-fe-qa:$IMAGE_TAG ./packages/wizq-frontend
+          docker push $ECR_REGISTRY/wizquotes-fe-qa:$IMAGE_TAG
+          echo "::set-output name=image::$ECR_REGISTRY/wizquotes-fe-qa:$IMAGE_TAG"
+
+      - name: Download task definition
+        id: download-td
+        run: |
+          aws ecs describe-task-definition --task-definition wizquotes-fe-qa --query taskDefinition > task-definition-proxy.json
+          aws ecs describe-task-definition --task-definition wizquotes-fe-qa --query taskDefinition > reserve-task-definition-proxy.json
+          echo "::set-output name=reserve-td::reserve-task-definition-proxy.json"
+
+      - name: Fill in the new image ID in the Amazon ECS task definition
+        id: task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-definition-proxy.json
+          container-name: wizquotes-fe-qa
+          image: ${{ steps.build-image.outputs.image }}
+
+      - name: Deploy Amazon ECS task definition
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.task-def.outputs.task-definition }}
+          service: wizquotes-fe-qa1
+          cluster: wizquotes-qa
+          wait-for-service-stability: true
+        timeout-minutes: 30
+
+      - name: Stop current task
+        if: ${{ failure() }}
+        run: |
+          TASK_ARN=$(aws ecs list-tasks --cluster "wizquotes-qa" --service "wizquotes-fe-qa1" --output text --query taskArns[0])
+          aws ecs stop-task --cluster "wizquotes-qa" --task ${TASK_ARN}
+
+      - name: Deploy Amazon ECS with old image
+        if: ${{ failure() }}
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.download-td.outputs.reserve-td }}
+          service: wizquotes-fe-qa1
+          cluster: wizquotes-qa
+          wait-for-service-stability: true
+        timeout-minutes: 30

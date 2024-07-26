@@ -1,0 +1,434 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String       @id @default(uuid())
+  entityType     EntityType   @default(USER) // I've hardcoded entityType instead of using an enum so we can remove the model easily
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  firstName      String
+  lastName       String
+  businessName   String?      @db.VarChar(50)
+  auth0UserId    String?      @unique
+  email          String       @unique
+  picture        String?
+  email_verified Boolean      @default(false)
+  userType       UserType?
+  subType        UserSubType?
+  earned         Float        @default(0)
+
+  projects                Project[]
+  addresses               UserAddress[]
+  Business                Business[]
+  authorContracts         Contracts[]         @relation(name: "authorContracts")
+  providerContracts       Contracts[]         @relation(name: "providerContracts")
+  receivedNotifications   Notification[]      @relation(name: "receivedNotification")
+  sentNotifications       Notification[]      @relation(name: "sentNotification")
+  projectProposals        ProjectProposal[]
+  authorProjectInvitation ProjectInvitation[] @relation(name: "authorInvitation")
+  projectInvitation       ProjectInvitation[] @relation(name: "providerInvitation")
+}
+
+model UserAddress {
+  id        String   @id @default(uuid())
+  name      String
+  userId    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model TestEntity {
+  id         String     @id @default(uuid())
+  entityType EntityType @default(TEST_ENTITY)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  name       String
+  email      String
+  phone      String
+}
+
+model Project {
+  id          String            @id @default(uuid())
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  name        String?
+  description String?
+  address     String?
+  dimensions  ProjectDimension?
+  start_date  String?
+  is_private  Boolean?
+  floor_plan  String?
+  skill_level String?
+  min_budget  String?
+  max_budget  String?
+  status      String?
+  stage       Int?
+  authorId    String
+
+  categories        CategoriesOnProjects[]
+  files             ProjectFile[]
+  author            User                   @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  skills            ProjectOnSkills[]
+  tasks             ProjectTask[]
+  contracts         Contracts[]
+  proposals         ProjectProposal[]
+  projectInvitation ProjectInvitation[]
+}
+
+model ProjectDimension {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  length    Float
+  width     Float
+  unit      Float
+  result    Float
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId String   @unique
+}
+
+model Category {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  name      String
+
+  projects         CategoriesOnProjects[]
+  businesses       CategoriesOnBusinesses[]
+  businessProjects CategoryOnBusinessProject[]
+}
+
+model Skill {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  name      String
+
+  projects ProjectOnSkills[]
+}
+
+model ProjectOnSkills {
+  projectId String
+  skillId   String
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  skill   Skill   @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, skillId])
+}
+
+model CategoriesOnProjects {
+  projectId  String // relation scalar field (used in the `@relation` attribute above)
+  categoryId String // relation scalar field (used in the `@relation` attribute above)
+
+  project  Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, categoryId])
+}
+
+model ProjectFile {
+  id           String   @id @default(uuid())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  fileUrl      String
+  originalName String
+  thumbUrl     String?  @db.VarChar(255)
+  size         Int?
+  projectId    String
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model ProjectTask {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  name      String
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model Services {
+  id         String   @id @default(uuid())
+  name       String   @db.VarChar(255)
+  isDesigner Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  business ServicesOnBusinesses[]
+}
+
+model Business {
+  id            String   @id @default(uuid())
+  authorId      String   @db.VarChar(255)
+  name          String   @db.VarChar(100)
+  description   String   @default("") @db.Text
+  license       String?  @default("") @db.VarChar(50)
+  employee_cnt  String   @db.VarChar(10)
+  like_location String   @default("") @db.Text
+  hourly_rate   Float?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  author           User                     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  categories       CategoriesOnBusinesses[]
+  services         ServicesOnBusinesses[]
+  location         LocationOnBusiness[]
+  businessProjects BusinessProject[]
+}
+
+model CategoriesOnBusinesses {
+  businessId String @db.VarChar(255)
+  categoryId String @db.VarChar(255)
+
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@id([businessId, categoryId])
+}
+
+model ServicesOnBusinesses {
+  businessId String @db.VarChar(255)
+  serviceId  String @db.VarChar(255)
+
+  service  Services @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@id([businessId, serviceId])
+}
+
+model LocationOnBusiness {
+  id         String @id @default(uuid())
+  businessId String @db.VarChar(255)
+  country    String @db.VarChar(45)
+  state      String @db.VarChar(45)
+  address    String @db.VarChar(100)
+  city       String @db.VarChar(100)
+  zipcode    String @db.VarChar(45)
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+model BusinessProject {
+  id         String   @id @default(uuid())
+  businessId String   @db.VarChar(255)
+  name       String   @db.VarChar(100)
+  location   String   @db.VarChar(255)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  business           Business                    @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  files              ProjectFileOnBusiness[]
+  businessCategories CategoryOnBusinessProject[]
+}
+
+model CategoryOnBusinessProject {
+  projectId  String @db.VarChar(255)
+  categoryId String @db.VarChar(255)
+
+  category        Category        @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  businessProject BusinessProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, categoryId])
+}
+
+model ProjectFileOnBusiness {
+  id           String   @id @default(uuid())
+  projectId    String   @db.VarChar(255)
+  fileUrl      String   @db.VarChar(255)
+  originalName String   @db.VarChar(255)
+  thumbUrl     String?  @db.VarChar(255)
+  size         Int?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  businessProject BusinessProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model Contracts {
+  id                 String            @id @default(uuid())
+  contractId         String?           @db.VarChar(7)
+  name               String            @db.VarChar(100)
+  description        String            @default("") @db.Text
+  projectId          String            @db.VarChar(255)
+  providerId         String            @db.VarChar(255)
+  start_date         String            @db.VarChar(255)
+  end_date           String            @db.VarChar(255)
+  authorId           String            @db.VarChar(255)
+  contract_amount    Float?
+  hourly_rate        Float?
+  weekly_limit       Float?
+  payment_rate       Float?
+  payment_frequency  PaymentFrequency?
+  invoice_cycle_ends InvoiceCycleEnds?
+  payment_due_date   String?
+  payment_first_day  String?
+  payment_amount     Float?
+  termination_date   String?
+  notice_period      Float?
+  period_unit        NoticePeriodUnit?
+  contract_type      ContractsType
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  author     User                    @relation(name: "authorContracts", fields: [authorId], references: [id], onDelete: Cascade)
+  provider   User                    @relation(name: "providerContracts", fields: [providerId], references: [id], onDelete: Cascade)
+  project    Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  milestones MilestonesOnContracts[]
+  files      ContractsFile[]
+}
+
+model MilestonesOnContracts {
+  id         String   @id @default(uuid())
+  contractId String   @db.VarChar(255)
+  name       String   @db.VarChar(100)
+  amount     Float
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  contract Contracts @relation(fields: [contractId], references: [id], onDelete: Cascade)
+}
+
+model ContractsFile {
+  id           String   @id @default(uuid())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  fileUrl      String
+  size         Int?
+  originalName String
+  contractId   String
+
+  contract Contracts @relation(fields: [contractId], references: [id], onDelete: Cascade)
+}
+
+model ProjectInvitation {
+  id         String   @id @default(uuid())
+  authorId   String   @db.VarChar(255)
+  projectId  String   @db.VarChar(255)
+  providerId String   @db.VarChar(255)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  author       User          @relation(name: "authorInvitation", fields: [authorId], references: [id], onDelete: Cascade)
+  provider     User          @relation(name: "providerInvitation", fields: [providerId], references: [id], onDelete: Cascade)
+  notification Notification?
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  type      String
+  message   String?
+  is_read   Boolean?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  authorId            String
+  receiverId          String
+  projectProposalId   String? @unique
+  projectInvitationId String? @unique
+
+  author            User               @relation(fields: [authorId], references: [id], name: "sentNotification", onDelete: Cascade)
+  receiver          User               @relation(fields: [receiverId], references: [id], name: "receivedNotification", onDelete: Cascade)
+  projectProposal   ProjectProposal?   @relation(fields: [projectProposalId], references: [id], onDelete: Cascade)
+  projectInvitation ProjectInvitation? @relation(fields: [projectInvitationId], references: [id], onDelete: Cascade)
+}
+
+model ProjectProposal {
+  id               String   @id @default(uuid())
+  proposed_bid     String
+  comment          String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  project_owner_id String
+
+  projectId    String
+  authorId     String
+  project      Project                @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  author       User                   @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  notification Notification?
+  tasks        ProjectProposalsTask[]
+  files        ProjectProposalsFile[]
+}
+
+model ProjectProposalsTask {
+  id                String  @id @default(uuid())
+  task_item         String
+  task_description  String?
+  estimated_price   Int
+  projectProposalId String
+
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  projectProposal ProjectProposal @relation(fields: [projectProposalId], references: [id], onDelete: Cascade)
+}
+
+model ProjectProposalsFile {
+  id                String  @id @default(uuid())
+  fileUrl           String
+  originalName      String
+  thumbUrl          String? @db.VarChar(255)
+  size              Int?
+  projectProposalId String
+
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  projectProposal ProjectProposal @relation(fields: [projectProposalId], references: [id], onDelete: Cascade)
+}
+
+enum EntityType {
+  USER
+  TEST_ENTITY
+}
+
+enum NotificationType {
+  MASSAGES
+  PROPOSALS
+}
+
+enum UserType {
+  HOME_OWNER
+  SERVICE_PROVIDER
+}
+
+enum UserSubType {
+  PROVIDER
+  DESIGNER
+}
+
+enum ContractsType {
+  MILESTONE
+  FIXED_RATE
+  HOURLY
+}
+
+enum PaymentFrequency {
+  WEEKLY
+  BI_WEEKLY
+  MONTHLY
+}
+
+enum InvoiceCycleEnds {
+  DAY_26_MONTH
+  DAY_27_MONTH
+  DAY_28_MONTH
+  DAY_29_MONTH
+  DAY_30_MONTH
+  LAST_DAY_MONTH
+}
+
+enum NoticePeriodUnit {
+  DAYS
+  MONTH
+}
