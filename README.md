@@ -1,4 +1,4 @@
-# WizzQuotes
+# Wizz
 ## Run project with docker compose 
 - copy environment variables for wizq-frontend and wizq-backen
 - run command ```docker-compose -f docker-compose.full.yml up --build```
