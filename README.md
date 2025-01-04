@@ -12,7 +12,7 @@
 Start database via Docker (you need to open it before running the command) and run cypress image
 
 ```
-docker-compose up -d
+ docker-compose up -d
 ```
 
 Test (Lint, type check, back-end tests, Cypress)
